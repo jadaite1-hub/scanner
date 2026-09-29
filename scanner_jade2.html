@@ -1,0 +1,986 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="화면스캐너"><style>:root{padding-top:env(safe-area-inset-top,0px)}</style></head><body>
+<title>화면 페이지 스캐너</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --bg:#EDF0F3; --panel:#FFFFFF; --ink:#141920; --muted:#5A6471; --line:#D3D9E0;
+  --accent:#1F4FD8; --accent-ink:#FFFFFF; --rec:#D23B2F; --ok:#1C8657; --warn:#B7791F;
+  --stage:#0C0F14; --chip:#E3E8EF;
+  --sans:"IBM Plex Sans KR",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E1115; --panel:#161A20; --ink:#E6E9ED; --muted:#98A1AC; --line:#29303A;
+    --accent:#6F94FF; --accent-ink:#0B1020; --rec:#FF6A5C; --ok:#4CC38A; --warn:#E3A847;
+    --stage:#05070A; --chip:#222933; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E1115; --panel:#161A20; --ink:#E6E9ED; --muted:#98A1AC; --line:#29303A;
+  --accent:#6F94FF; --accent-ink:#0B1020; --rec:#FF6A5C; --ok:#4CC38A; --warn:#E3A847;
+  --stage:#05070A; --chip:#222933; color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;padding:16px;margin:0}
+h1{font-size:20px;margin:0;letter-spacing:-.01em;text-wrap:balance}
+h2{font-size:13px;margin:0;color:var(--muted);font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.top{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 16px;max-width:1400px;margin:0 auto 14px}
+.top p{margin:0;color:var(--muted);font-size:13.5px}
+.app{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:16px;max-width:1400px;margin:0 auto}
+@media (max-width:900px){.app{grid-template-columns:minmax(0,1fr)}}
+.col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:12px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button{font:inherit;font-weight:600;font-size:14px;border-radius:9px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:10px 14px;cursor:pointer;min-height:44px}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button.stop{background:var(--rec);border-color:var(--rec);color:#fff}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.filebtn{position:relative;overflow:hidden;display:inline-flex}
+.filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer}
+
+/* stage */
+.stagewrap{background:var(--stage);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.statusbar{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;color:#C9D1DB;font-size:13px;font-family:var(--mono)}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:99px;background:#1B212A;color:#C9D1DB;font-weight:600;font-family:var(--sans)}
+.chip i{width:8px;height:8px;border-radius:50%;background:#6B7480;display:block}
+.chip[data-s="watch"] i{background:#4CC38A}
+.chip[data-s="changing"] i{background:#E3A847}
+.chip[data-s="settling"] i{background:#6F94FF;animation:pulse 0.8s infinite alternate}
+.chip[data-s="shot"] i{background:#FF6A5C}
+@keyframes pulse{to{opacity:.3}}
+@media (prefers-reduced-motion:reduce){.chip i{animation:none!important}}
+.meter{display:inline-flex;gap:6px;align-items:center}
+.meter b{display:block;width:90px;height:6px;background:#232A34;border-radius:3px;overflow:hidden;position:relative}
+.meter b span{position:absolute;inset:0 auto 0 0;background:#E3A847;width:0}
+.meter b em{position:absolute;top:-2px;bottom:-2px;width:2px;background:#fff;left:0}
+.count{margin-left:auto;color:#fff}
+.stage{position:relative;width:min(100%, calc(64vh * var(--ar,1.333)));aspect-ratio:var(--ar,1.333);margin-inline:auto;max-width:100%;border-radius:6px;overflow:hidden;background:#000}
+.stage video{position:absolute;inset:0;width:100%;height:100%;object-fit:fill;display:block}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
+.stage .flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .35s}
+.stage .flash.on{opacity:.55;transition:none}
+.empty{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;gap:10px;padding:20px 24px;color:#C9D1DB;font-size:14px}
+.empty ol{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width:52ch}
+.empty strong{color:#fff}
+.hint{color:#8B95A1;font-size:12.5px;font-family:var(--sans)}
+.progress{height:4px;background:#232A34;border-radius:2px;overflow:hidden}
+.progress span{display:block;height:100%;width:0;background:#6F94FF}
+.note{border:1px solid var(--warn);background:color-mix(in srgb,var(--warn) 10%,var(--panel));border-radius:10px;padding:10px 12px;font-size:13.5px}
+.note p{margin:0 0 4px}
+
+/* settings */
+.set{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px 14px}
+@media (max-width:480px){.set{grid-template-columns:minmax(0,1fr)}}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field label{font-size:13px;color:var(--muted);display:flex;justify-content:space-between;gap:8px}
+.field label output{font-family:var(--mono);color:var(--ink)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+select,input[type=text]{font:inherit;font-size:14px;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);width:100%;min-height:42px}
+.check{display:flex;gap:8px;align-items:center;font-size:14px}
+.check input{width:20px;height:20px;accent-color:var(--accent)}
+
+/* pages */
+.pages{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;max-height:52vh;overflow:auto;padding:2px}
+.pg{position:relative;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--bg)}
+.pg img{display:block;width:100%;aspect-ratio:4/3;object-fit:contain;background:var(--chip)}
+.pg .n{position:absolute;left:6px;top:6px;min-width:30px;height:30px;padding:0 7px;border-radius:7px;background:var(--accent);color:var(--accent-ink);font:600 15px/30px var(--mono);text-align:center}
+.pg .meta{display:flex;justify-content:space-between;align-items:center;padding:4px 6px 4px 8px;font:500 11.5px var(--mono);color:var(--muted)}
+.pg .meta button{min-height:30px;padding:2px 8px;font-size:12px;font-family:var(--sans)}
+.nopages{color:var(--muted);font-size:13.5px;padding:10px 0}
+.confirm{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13.5px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:calc(100% - 32px)}
+.toast.on{opacity:1}
+.changes summary{cursor:pointer;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.changes .ver{font:500 12px var(--mono);color:var(--accent)}
+.chg{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:8px;font-size:13.5px;max-width:65ch}
+.chg-prev{margin:0;font-size:12px;color:var(--muted)}
+.viewer{position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:calc(12px + env(safe-area-inset-top,0px)) 12px calc(12px + env(safe-area-inset-bottom,0px));overflow:auto}
+.viewer img{max-width:100%;max-height:calc(100% - 30px);object-fit:contain;background:#fff;touch-action:pinch-zoom}
+.viewer span{color:#aab;font-size:12px}
+.pg img{cursor:zoom-in}
+/* phone dock */
+.dock{display:none}
+@media (max-width:600px), (max-height:500px){
+  body{padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+  .top p{display:none}
+  h1{font-size:17px}
+  .stage{width:min(100%, calc(56vh * var(--ar,1.333)))}
+  .stagewrap{padding:8px}
+  .statusbar{font-size:12px;gap:6px 10px}
+  .meter b{width:60px}
+  .dock{display:flex;gap:8px;position:fixed;left:0;right:0;bottom:0;z-index:5;padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));background:color-mix(in srgb,var(--panel) 92%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid var(--line)}
+  .dock button{flex:1;min-height:50px;padding:8px 6px;font-size:14px}
+  .dock #dSave{flex:0 0 auto;min-width:84px}
+  .toast{bottom:calc(92px + env(safe-area-inset-bottom,0px))}
+}
+@media (max-height:500px) and (orientation:landscape){
+  .app{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)}
+  .stage{width:min(100%, calc(62vh * var(--ar,1.333)))}
+}
+
+</style>
+
+<header class="top">
+  <h1>화면 페이지 스캐너 <span style="font:500 12px var(--mono);color:var(--accent)">v7</span></h1>
+  <p>아이폰·아이패드로 모니터를 비추면, 화면이 바뀔 때마다 자동으로 찍어 1번부터 번호를 붙이고 PDF로 저장합니다.</p>
+</header>
+
+<main class="app">
+  <section class="col">
+    <div class="stagewrap">
+      <div class="statusbar">
+        <span class="chip" id="chip" data-s="idle"><i></i><span id="chipText">대기</span></span>
+        <span class="meter" title="기준 대비 바뀐 화면 비율">변화 <b><span id="mBar"></span><em id="mThr"></em></b> <span id="mVal">0.0%</span></span>
+        <span class="chip" id="orient" style="font-weight:500">방향 자동</span>
+        <span class="count" id="count">0장</span>
+      </div>
+      <div class="stage" id="stage">
+        <video id="video" playsinline muted></video>
+        <canvas id="overlay" hidden></canvas>
+        <div class="flash" id="flash"></div>
+        <div class="empty" id="empty">
+          <strong>시작하는 방법</strong>
+          <ol>
+            <li>아이폰이나 아이패드를 거치대에 고정하고 모니터 화면이 다 보이게 맞춥니다.</li>
+            <li><b>카메라 켜기</b> 또는 <b>녹화 영상 불러오기</b>를 누릅니다.</li>
+            <li>모니터 화면이 카메라 화면을 꽉 채울수록 글자가 선명합니다. 테두리는 자동으로 맞춰지고, 어긋나면 파란 모서리를 끌어 고칩니다.</li>
+            <li><b>자동 스캔 시작</b>. 화면이 바뀌고 멈추면 한 장씩 찍힙니다.</li>
+          </ol>
+        </div>
+      </div>
+      <div class="progress" id="progWrap" hidden><span id="prog"></span></div>
+      <div class="hint" id="hint">모서리는 손가락으로 끌어서 조정합니다. 조정한 위치는 다음에도 기억합니다.</div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <button id="btnCam" class="primary">카메라 켜기</button>
+        <span class="filebtn"><button tabindex="-1" id="btnFileFace">녹화 영상 불러오기</button><input type="file" id="fileIn" accept="video/*" aria-label="녹화 영상 불러오기"></span>
+        <button id="btnRun" disabled>자동 스캔 시작</button>
+        <button id="btnShot" disabled>지금 한 장 찍기</button>
+        <button id="btnAuto" disabled>테두리 자동 맞춤</button>
+        <button id="btnReset" disabled>모서리 초기화</button>
+      </div>
+      <div class="note" id="camNote" hidden>
+        <p><b>이 화면에서는 카메라를 쓸 수 없어요.</b></p>
+        <p>방법 1: 아이폰·아이패드 카메라 앱으로 모니터를 <b>동영상 녹화</b>한 뒤 ‘녹화 영상 불러오기’로 넣으면, 화면이 바뀐 지점마다 자동으로 페이지를 뽑아 번호를 붙입니다.</p>
+        <p style="margin:0">방법 2: 함께 받은 HTML 파일을 https 주소로 올려 Safari에서 열면 실시간 카메라 스캔이 됩니다.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="col">
+    <details class="panel changes" id="changes">
+      <summary><b>업데이트 내역</b> <span class="ver">v7 · 9월 29일</span></summary>
+      <ol class="chg">
+        <li><b>자동 테두리가 예전 모서리에 묶이던 문제 수정</b> — 전에는 찾은 테두리가 이전 파란 모서리 범위를 벗어나면 버리고 옛 모서리로 잘랐어요. 이제 매번 화면 전체에서 새로 찾고, 찾은 위치로 모서리도 갱신합니다.</li>
+        <li><b>테두리가 바깥 여백까지 번지던 버그 수정</b> — 제목줄을 포함하려고 테두리를 넓히는 단계가 사진 가장자리의 어두운 부분을 모니터 테두리로 착각했어요. 넓히는 범위를 8%로 줄이고, 사진 밖은 보지 않으며, 모니터 베젤 두께가 확인될 때만 넓힙니다.</li>
+        <li><b>테두리 미세 조정 추가</b> — 네 변을 각각 ±1% 안에서 밝기 경계가 가장 뚜렷한 곳으로 맞추고, 분석 해상도를 480→640px로 올렸어요.</li>
+        <li><b>카메라 켤 때 자동 맞춤 재시도</b> — 전에는 0.4초 뒤 1번만 시도해서 노출이 안정되기 전이면 실패하고 옛 모서리가 남았어요. 이제 옛 모서리를 지우고 최대 5번(약 5초) 다시 시도하며, 자동 스캔 시작할 때도 한 번 더 맞춥니다.</li>
+        <li><b>잘린 결과 표시</b> — 찍을 때 초록 선이면 자동으로 찾은 테두리, 주황 선이면 못 찾아서 파란 모서리로 자른 것이에요. 아래 안내 문구에도 표시됩니다.</li>
+      </ol>
+      <p class="chg-prev">v6: 글자 선명 보정·5장 겹쳐 찍기·확대 보기 · v5: 가로·세로 자동 방향 · v4: 아이폰 화면 · v3: 테두리 자동 맞춤 · v2: 화면 떨림 보정</p>
+    </details>
+    <div class="panel">
+      <h2>감지 설정</h2>
+      <div class="set">
+        <div class="field">
+          <label for="thr">바뀜 기준 <output id="thrO">3%</output></label>
+          <input type="range" id="thr" min="0.5" max="20" step="0.5" value="3">
+          <span class="hint" style="color:var(--muted)">낮을수록 작은 변화에도 찍힘</span>
+        </div>
+        <div class="field">
+          <label for="stable">멈춘 뒤 대기 <output id="stableO">0.8초</output></label>
+          <input type="range" id="stable" min="300" max="3000" step="100" value="800">
+          <span class="hint" style="color:var(--muted)">스크롤·전환 효과가 끝날 때까지</span>
+        </div>
+        <div class="field">
+          <label for="look">스캔 보정</label>
+          <select id="look">
+            <option value="text">글자 선명 문서 (바탕 하얗게·추천)</option>
+            <option value="gray">흑백 문서</option>
+            <option value="bw">고대비 흑백 (글자만 진하게)</option>
+            <option value="color">사진·그림 (자연스러운 색)</option>
+            <option value="orig">보정 없음</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="maxEdge">해상도 (긴 변)</label>
+          <select id="maxEdge">
+            <option value="1600">1600px · 작은 용량</option>
+            <option value="2400">2400px</option>
+            <option value="3200" selected>3200px · 기본</option>
+            <option value="4000">최대 (카메라 원본 그대로)</option>
+          </select>
+        </div>
+        <label class="check"><input type="checkbox" id="stack" checked> 5장 겹쳐 찍어 잡음 줄이기</label>
+        <label class="check"><input type="checkbox" id="moire" checked> 모니터 물결무늬(모아레) 완화</label>
+        <div class="field">
+          <label for="inset">테두리 안쪽으로 더 자르기 <output id="insetO">0.5%</output></label>
+          <input type="range" id="inset" min="0" max="4" step="0.25" value="0.5">
+        </div>
+        <div class="field" id="zoomField" hidden>
+          <label for="zoom">카메라 확대 <output id="zoomO">1.0×</output></label>
+          <input type="range" id="zoom" min="1" max="3" step="0.1" value="1">
+        </div>
+        <label class="check"><input type="checkbox" id="stamp" checked> PDF에 페이지 번호 표시</label>
+        <label class="check"><input type="checkbox" id="autoEach" checked> 찍을 때마다 문서 테두리 자동 맞춤</label>
+        <div class="field">
+          <label for="orientSel">저장 방향</label>
+          <select id="orientSel">
+            <option value="auto">자동 (폰을 세운 방향 그대로)</option>
+            <option value="0">돌리지 않음</option>
+            <option value="270">오른쪽으로 90°</option>
+            <option value="90">왼쪽으로 90°</option>
+            <option value="180">180°</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="justify-content:space-between">
+        <h2>스캔한 페이지</h2>
+        <button id="btnClear" disabled style="min-height:34px;padding:4px 10px;font-size:13px">모두 지우기</button>
+      </div>
+      <div class="confirm" id="clearAsk" hidden>
+        <span>스캔한 페이지를 모두 지울까요?</span>
+        <button class="stop" id="clearYes" style="min-height:36px;padding:4px 12px">지우기</button>
+        <button id="clearNo" style="min-height:36px;padding:4px 12px">취소</button>
+      </div>
+      <div class="pages" id="pages"></div>
+      <div class="field">
+        <label for="prefix">파일 이름</label>
+        <input type="text" id="prefix" value="스캔" maxlength="40">
+      </div>
+      <div class="row">
+        <button class="primary" id="btnPdf" disabled>PDF 1개로 저장</button>
+        <button id="btnZip" disabled>번호별 PDF 묶음(ZIP)</button>
+      </div>
+      <span class="hint" style="color:var(--muted)" id="nameHint">예: 스캔_001.pdf, 스캔_002.pdf …</span>
+    </div>
+  </section>
+</main>
+<nav class="dock" aria-label="빠른 조작">
+  <button id="dRun" class="primary" disabled>자동 스캔 시작</button>
+  <button id="dShot" disabled>한 장 찍기</button>
+  <button id="dSave" disabled>저장 0장</button>
+</nav>
+<div class="viewer" id="viewer" hidden role="dialog" aria-label="페이지 크게 보기"><img id="viewImg" alt=""><span>화면을 누르면 닫힙니다</span></div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(() => {
+const $ = s => document.querySelector(s);
+const video = $('#video'), ov = $('#overlay'), stage = $('#stage');
+const ls = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+const S = Object.assign({thr:3, stable:800, look:'text', maxEdge:3200, stack:true, inset:0.5, moire:true, stamp:true, autoEach:true, orient:'auto', prefix:'스캔'}, ls.get('scan.settings', {}));
+if(!ls.get('scan.v6',false)){ S.look='text'; S.maxEdge=3200; S.stack=true; S.inset=0.5; ls.set('scan.v6',true); }
+let corners = ls.get('scan.corners', null) || [[.06,.06],[.94,.06],[.94,.94],[.06,.94]];
+let mode = 'none', running = false, stream = null, wake = null;
+let pages = [];
+
+/* ---------- toast ---------- */
+let tT; function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(tT); tT=setTimeout(()=>t.classList.remove('on'),2600); }
+
+/* ---------- settings binding ---------- */
+function bindSettings(){
+  const thr=$('#thr'), st=$('#stable');
+  thr.value=S.thr; st.value=S.stable; $('#look').value=S.look; $('#maxEdge').value=String(S.maxEdge);
+  $('#moire').checked=S.moire; $('#autoEach').checked=S.autoEach; $('#stack').checked=S.stack; $('#inset').value=S.inset; $('#orientSel').value=S.orient; $('#stamp').checked=S.stamp; $('#prefix').value=S.prefix;
+  const upd=()=>{
+    S.thr=+thr.value; S.stable=+st.value; S.look=$('#look').value; S.maxEdge=+$('#maxEdge').value;
+    S.moire=$('#moire').checked; S.autoEach=$('#autoEach').checked; S.stack=$('#stack').checked; S.inset=+$('#inset').value; $('#insetO').textContent=S.inset+'%'; S.orient=$('#orientSel').value; if(typeof showOrient==='function') try{ showOrient(); }catch(e){} S.stamp=$('#stamp').checked; S.prefix=($('#prefix').value.trim()||'스캔').replace(/[\\/:*?"<>|]/g,'_');
+    $('#thrO').textContent=S.thr+'%'; $('#stableO').textContent=(S.stable/1000).toFixed(1)+'초';
+    $('#nameHint').textContent=`예: ${S.prefix}_001.pdf, ${S.prefix}_002.pdf …`;
+    
+    ls.set('scan.settings', S);
+  };
+  ['thr','stable','look','maxEdge','moire','stamp','autoEach','orientSel','prefix','stack','inset'].forEach(id=>$('#'+id).addEventListener('input',upd));
+  upd();
+}
+
+/* ---------- homography (unit square -> quad) ---------- */
+function homog(q){
+  const [x0,y0]=q[0],[x1,y1]=q[1],[x2,y2]=q[2],[x3,y3]=q[3];
+  const dx1=x1-x2, dx2=x3-x2, dx3=x0-x1+x2-x3, dy1=y1-y2, dy2=y3-y2, dy3=y0-y1+y2-y3;
+  let g=0,h=0; const det=dx1*dy2-dx2*dy1;
+  if(Math.abs(dx3)>1e-9||Math.abs(dy3)>1e-9){ if(Math.abs(det)>1e-12){ g=(dx3*dy2-dx2*dy3)/det; h=(dx1*dy3-dx3*dy1)/det; } }
+  return {a:x1-x0+g*x1, b:x3-x0+h*x3, c:x0, d:y1-y0+g*y1, e:y3-y0+h*y3, f:y0, g, h};
+}
+
+/* ---------- change detection ---------- */
+const SW=192, SH=144, GW=48, GH=36;
+const sigC=document.createElement('canvas'); sigC.width=SW; sigC.height=SH;
+const sigX=sigC.getContext('2d',{willReadFrequently:true});
+function signature(){
+  if(!video.videoWidth) return null;
+  sigX.drawImage(video,0,0,SW,SH);
+  const d=sigX.getImageData(0,0,SW,SH).data;
+  const M=homog(corners.map(([x,y])=>[x*SW,y*SH]));
+  const out=new Float32Array(GW*GH); let sum=0;
+  for(let j=0;j<GH;j++) for(let i=0;i<GW;i++){
+    let acc=0;
+    for(let b=0;b<2;b++) for(let a=0;a<2;a++){
+      const u=(i+(a+.5)/2)/GW, v=(j+(b+.5)/2)/GH, w=M.g*u+M.h*v+1;
+      let x=((M.a*u+M.b*v+M.c)/w)|0, y=((M.d*u+M.e*v+M.f)/w)|0;
+      x=x<0?0:x>SW-1?SW-1:x; y=y<0?0:y>SH-1?SH-1:y;
+      const k=(y*SW+x)*4; acc+=d[k]*.299+d[k+1]*.587+d[k+2]*.114;
+    }
+    out[j*GW+i]=acc/4; sum+=acc/4;
+  }
+  const m=sum/out.length; for(let k=0;k<out.length;k++) out[k]-=m;
+  out.mean=m; return out;
+}
+function cmp(a,b){ let n=0; for(let k=0;k<a.length;k++) if(Math.abs(a[k]-b[k])>18) n++; return {pct:n/a.length*100, dm:Math.abs(a.mean-b.mean)}; }
+let noise=0, meanNoise=0;
+const meanTol=()=>Math.max(22, meanNoise*2+8);
+const effT=()=>Math.max(S.thr, noise*2+1);
+const stillT=()=>Math.max(0.6, S.thr*0.35, noise*1.5+0.5);
+function score(r){ return r.dm>meanTol() ? Math.max(r.pct,50) : r.pct; }
+function changed(a,b){ if(!a||!b) return 100; return score(cmp(a,b)); }
+
+let prevSig=null, refSig=null, stableSince=null, phase='watch', smooth=null, calib=null, bad=0;
+function resetDetect(){ prevSig=null; refSig=null; stableSince=null; phase='watch'; smooth=null; calib={t0:null,p:[],m:[]}; noise=0; meanNoise=0; bad=0; }
+function setStatus(s,txt){ const c=$('#chip'); c.dataset.s=s; $('#chipText').textContent=txt; }
+function meter(v){ $('#mBar').style.width=Math.min(100,v/20*100)+'%'; $('#mVal').textContent=(v>=100?'—':v.toFixed(1)+'%'); $('#mThr').style.left=Math.min(100,effT()/20*100)+'%'; }
+const p90=a=>{ if(!a.length) return 0; const b=[...a].sort((x,y)=>x-y); return b[Math.floor((b.length-1)*.9)]; };
+
+async function tick(now){
+  const raw=signature(); if(!raw) return;
+  if(smooth && smooth.length===raw.length){ for(let k=0;k<raw.length;k++) smooth[k]=smooth[k]*.5+raw[k]*.5; smooth.mean=smooth.mean*.5+raw.mean*.5; }
+  else { smooth=Float32Array.from(raw); smooth.mean=raw.mean; }
+  const sig=Float32Array.from(smooth); sig.mean=smooth.mean;
+  const fr=prevSig?cmp(sig,prevSig):null; prevSig=sig;
+
+  // 1) 시작 직후 1.5초: 화면 떨림(잡음) 측정 → 1번 페이지 촬영
+  if(calib){
+    if(calib.t0==null) calib.t0=now;
+    if(fr){ calib.p.push(fr.pct); calib.m.push(fr.dm); }
+    setStatus('settling','화면 떨림 측정 중');
+    if(now-calib.t0>=1500 && calib.p.length>=3){
+      noise=Math.min(15,p90(calib.p)); meanNoise=Math.min(30,p90(calib.m)); calib=null;
+      refSig=sig; await capture(); rebase();
+    }
+    diag(fr?fr.pct:0); return;
+  }
+
+  const fd=fr?score(fr):100, rd=changed(sig,refSig), T=effT();
+  meter(rd); diag(fd);
+  if(phase==='watch' && rd>T){ phase='changing'; stableSince=null; bad=0; }
+  if(phase==='changing'){
+    if(fd<=stillT()){ bad=0; if(stableSince==null) stableSince=now; }
+    else if(++bad>=2){ stableSince=null; }
+    if(stableSince==null){ setStatus('changing','화면 바뀌는 중'); return; }
+    setStatus('settling','멈춤 확인 중');
+    if(now-stableSince>=S.stable){
+      phase='watch'; stableSince=null;
+      if(changed(sig,refSig)>T){ refSig=sig; await capture(); rebase(); }
+    }
+  } else setStatus('watch', mode==='file'?'영상 분석 중':'감시 중');
+}
+function diag(fd){
+  $('#hint').textContent = calib ? '처음 1.5초 동안 화면을 그대로 두세요. 떨림을 잰 뒤 1번을 찍습니다.'
+    : `떨림 ${noise.toFixed(1)}% · 바뀜 기준 ${effT().toFixed(1)}% · 지금 움직임 ${fd>=100?'—':fd.toFixed(1)+'%'} · 멈춤 인정 ${stillT().toFixed(1)}% 이하`;
+}
+
+/* ---------- capture ---------- */
+const fullC=document.createElement('canvas'), fX=fullC.getContext('2d',{willReadFrequently:true});
+const outC=document.createElement('canvas'), oX=outC.getContext('2d');
+// 원근 보정. ss>1 이면 한 픽셀을 ss×ss 점으로 나눠 평균(축소할 때 글자 가장자리 계단·물결 줄임)
+function warp(src,q,W,H,ss){
+  const sd=src.data, sw=src.width, sh=src.height, out=new ImageData(W,H), od=out.data, M=homog(q);
+  const mx=sw-1.001, my=sh-1.001, row=sw*4, n=ss*ss, acc=[0,0,0];
+  for(let y=0;y<H;y++){
+    for(let x=0;x<W;x++){
+      acc[0]=acc[1]=acc[2]=0;
+      for(let j=0;j<ss;j++) for(let i=0;i<ss;i++){
+        const u=(x+(i+.5)/ss)/W, v=(y+(j+.5)/ss)/H, w=M.g*u+M.h*v+1;
+        let sx=(M.a*u+M.b*v+M.c)/w-.5, sy=(M.d*u+M.e*v+M.f)/w-.5;
+        sx=sx<0?0:sx>mx?mx:sx; sy=sy<0?0:sy>my?my:sy;
+        const x0=sx|0, y0=sy|0, fx=sx-x0, fy=sy-y0, i00=(y0*sw+x0)*4, i01=i00+row;
+        for(let c=0;c<3;c++){
+          const t=sd[i00+c]+(sd[i00+4+c]-sd[i00+c])*fx, b=sd[i01+c]+(sd[i01+4+c]-sd[i01+c])*fx;
+          acc[c]+=t+(b-t)*fy;
+        }
+      }
+      const o=(y*W+x)*4; od[o]=acc[0]/n; od[o+1]=acc[1]/n; od[o+2]=acc[2]/n; od[o+3]=255;
+    }
+  }
+  return out;
+}
+function blur(img){
+  const W=img.width,H=img.height,d=img.data,t=new Uint8ClampedArray(d.length);
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++){ const o=(y*W+x)*4, l=x>0?o-4:o, r=x<W-1?o+4:o; for(let c=0;c<3;c++) t[o+c]=(d[l+c]+2*d[o+c]+d[r+c])>>2; }
+  for(let y=0;y<H;y++){ const up=y>0?-W*4:0, dn=y<H-1?W*4:0; for(let x=0;x<W;x++){ const o=(y*W+x)*4; for(let c=0;c<3;c++) d[o+c]=(t[o+up+c]+2*t[o+c]+t[o+dn+c])>>2; } }
+}
+// 배경 평탄화: 반사·그늘·밝기 얼룩을 지워 바탕을 고르게 흰색으로
+function flatten(img){
+  const W=img.width,H=img.height,d=img.data, B=Math.max(12,Math.round(Math.max(W,H)/90));
+  const gw=Math.ceil(W/B), gh=Math.ceil(H/B), m=new Float32Array(gw*gh);
+  const Ls=[]; for(let i=0;i<d.length;i+=64) Ls.push(d[i]*.299+d[i+1]*.587+d[i+2]*.114);
+  Ls.sort((a,b)=>a-b); if(Ls[Ls.length>>1]<100) return false; // 어두운 바탕 문서(다크 모드)는 건너뜀
+  for(let by=0;by<gh;by++) for(let bx=0;bx<gw;bx++){
+    const hist=new Uint16Array(64); let n=0;
+    for(let y=by*B;y<Math.min(H,(by+1)*B);y+=2) for(let x=bx*B;x<Math.min(W,(bx+1)*B);x+=2){ const o=(y*W+x)*4; hist[((d[o]*77+d[o+1]*150+d[o+2]*29)>>8)>>2]++; n++; }
+    let a=0,k=63; for(;k>0;k--){ a+=hist[k]; if(a>=n*0.1) break; } m[by*gw+bx]=k*4+2; // 블록의 밝은 쪽 10% = 바탕색
+  }
+  // 글자가 빽빽한 블록 보정: 이웃 최댓값 → 부드럽게
+  let t=new Float32Array(m);
+  for(let y=0;y<gh;y++) for(let x=0;x<gw;x++){ let v=0; for(let j=-1;j<=1;j++) for(let i=-1;i<=1;i++){ const X=x+i,Y=y+j; if(X>=0&&Y>=0&&X<gw&&Y<gh) v=Math.max(v,m[Y*gw+X]); } t[y*gw+x]=v; }
+  for(let pass=0;pass<3;pass++){ const u=new Float32Array(t); for(let y=0;y<gh;y++) for(let x=0;x<gw;x++){ let s=0,c=0; for(let j=-1;j<=1;j++) for(let i=-1;i<=1;i++){ const X=x+i,Y=y+j; if(X>=0&&Y>=0&&X<gw&&Y<gh){ s+=u[Y*gw+X]; c++; } } t[y*gw+x]=s/c; } }
+  for(let y=0;y<H;y++){
+    const fy=Math.min(gh-1.001,Math.max(0,(y+.5)/B-.5)), y0=fy|0, ay=fy-y0;
+    for(let x=0;x<W;x++){
+      const fx=Math.min(gw-1.001,Math.max(0,(x+.5)/B-.5)), x0=fx|0, ax=fx-x0, i0=y0*gw+x0;
+      const i1=Math.min(i0+1,y0*gw+gw-1), i2=Math.min(i0+gw,t.length-1), i3=Math.min(i2+1,t.length-1);
+      const bg=(t[i0]*(1-ax)+t[i1]*ax)*(1-ay)+(t[i2]*(1-ax)+t[i3]*ax)*ay;
+      const gain=Math.min(3,248/Math.max(40,bg)), o=(y*W+x)*4;
+      d[o]*=gain; d[o+1]*=gain; d[o+2]*=gain;
+    }
+  }
+  return true;
+}
+// 언샤프 마스크: 글자 윤곽을 또렷하게
+function sharpen(img,amount){
+  const W=img.width,H=img.height,d=img.data,b=new Uint8ClampedArray(d);
+  const tmp={width:W,height:H,data:b}; blur(tmp); blur(tmp);
+  for(let i=0;i<d.length;i+=4) for(let c=0;c<3;c++){ const v=d[i+c]+(d[i+c]-b[i+c])*amount; d[i+c]=v; }
+}
+function levels(hist,total,pl,ph){
+  const pick=p=>{ let a=0; for(let k=0;k<256;k++){ a+=hist[k]; if(a>=total*p) return k; } return 255; };
+  const lo=pick(pl||.01), hi=pick(ph||.985); return hi-lo<40 ? [0,255] : [lo,hi];
+}
+function enhance(img,look){
+  if(look==='orig') return;
+  const d=img.data;
+  if(look==='color'){
+    sharpen(img,0.5);
+    const hs=[new Uint32Array(256),new Uint32Array(256),new Uint32Array(256)]; let n=0;
+    for(let i=0;i<d.length;i+=16){ hs[0][d[i]]++; hs[1][d[i+1]]++; hs[2][d[i+2]]++; n++; }
+    const luts=hs.map(h=>{ const [lo,hi]=levels(h,n), L=new Uint8ClampedArray(256); for(let k=0;k<256;k++) L[k]=(k-lo)*255/(hi-lo); return L; });
+    for(let i=0;i<d.length;i+=4){ d[i]=luts[0][d[i]]; d[i+1]=luts[1][d[i+1]]; d[i+2]=luts[2][d[i+2]]; }
+    return;
+  }
+  const flat=flatten(img);
+  sharpen(img, look==='text'?1.0:1.2);
+  const h=new Uint32Array(256); let n=0;
+  for(let i=0;i<d.length;i+=16){ h[(d[i]*77+d[i+1]*150+d[i+2]*29)>>8]++; n++; }
+  const [lo,hi]=levels(h,n,.005,flat?.6:.985), L=new Float32Array(256);
+  for(let k=0;k<256;k++){ let v=Math.min(1,Math.max(0,(k-lo)/(hi-lo))); v= look==='bw' ? (v<.5?2*v*v:1-2*(1-v)*(1-v)) : Math.pow(v,1.35); L[k]=v*255; }
+  if(look==='text'){ // 색은 살리고 밝기만 문서처럼
+    for(let i=0;i<d.length;i+=4){ const y=(d[i]*77+d[i+1]*150+d[i+2]*29)>>8, k=y>0?L[y]/y:0; d[i]=d[i]*k; d[i+1]=d[i+1]*k; d[i+2]=d[i+2]*k; }
+  } else {
+    for(let i=0;i<d.length;i+=4){ const g=L[(d[i]*77+d[i+1]*150+d[i+2]*29)>>8]; d[i]=d[i+1]=d[i+2]=g; }
+  }
+}
+
+/* ---------- auto border detection ---------- */
+const dC=document.createElement('canvas'), dX=dC.getContext('2d',{willReadFrequently:true});
+function boxBlur(g,W,H){
+  const t=new Float32Array(g.length);
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++){ const i=y*W+x; t[i]=(g[x>0?i-1:i]+g[i]+g[x<W-1?i+1:i])/3; }
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++){ const i=y*W+x; g[i]=(t[y>0?i-W:i]+t[i]+t[y<H-1?i+W:i])/3; }
+}
+function otsu(g){
+  const h=new Float64Array(256); for(const v of g) h[Math.min(255,Math.max(0,v|0))]++;
+  const N=g.length; let sum=0; for(let k=0;k<256;k++) sum+=k*h[k];
+  let sB=0,wB=0,best=0,t=128;
+  for(let k=0;k<256;k++){ wB+=h[k]; if(!wB) continue; const wF=N-wB; if(!wF) break; sB+=k*h[k];
+    const mB=sB/wB, mF=(sum-sB)/wF, v=wB*wF*(mB-mF)*(mB-mF); if(v>best){best=v;t=k;} }
+  return t;
+}
+function fitLine(pts, horiz){ // horiz: y=a*x+b (pts [x,y]); else x=a*y+b
+  let P=pts.map(([x,y])=>horiz?[x,y]:[y,x]);
+  let a=0,b=0;
+  for(let pass=0;pass<3;pass++){
+    if(P.length<5) return null;
+    let sx=0,sy=0,sxx=0,sxy=0; for(const [u,v] of P){ sx+=u; sy+=v; sxx+=u*u; sxy+=u*v; }
+    const n=P.length, d=n*sxx-sx*sx; if(Math.abs(d)<1e-9) return null;
+    a=(n*sxy-sx*sy)/d; b=(sy-a*sx)/n;
+    const res=P.map(([u,v])=>Math.abs(v-(a*u+b))), lim=Math.max(1.5, [...res].sort((x,y)=>x-y)[Math.floor(res.length*.7)]*2);
+    P=P.filter((_,i)=>res[i]<=lim);
+  }
+  return {a,b};
+}
+function quadArea(q){ let s=0; for(let i=0;i<4;i++){ const [x1,y1]=q[i],[x2,y2]=q[(i+1)%4]; s+=x1*y2-x2*y1; } return Math.abs(s)/2; }
+function quadOK(q,ar){
+  ar=ar||1;
+  if(!q||q.some(p=>!isFinite(p[0])||!isFinite(p[1])||p[0]<-.02||p[0]>1.02||p[1]<-.02||p[1]>1.02)) return false;
+  if(quadArea(q)<0.06) return false;
+  const P=q.map(([x,y])=>[x*ar,y]);
+  for(let i=0;i<4;i++){ // 각 꼭짓점 각도 60~120도, 볼록
+    const p=P[i], a=P[(i+3)%4], b=P[(i+1)%4], v1=[a[0]-p[0],a[1]-p[1]], v2=[b[0]-p[0],b[1]-p[1]];
+    const cos=(v1[0]*v2[0]+v1[1]*v2[1])/(Math.hypot(...v1)*Math.hypot(...v2)); if(Math.abs(cos)>0.5) return false;
+    const cr=(P[(i+1)%4][0]-p[0])*(P[(i+2)%4][1]-P[(i+1)%4][1])-(P[(i+1)%4][1]-p[1])*(P[(i+2)%4][0]-P[(i+1)%4][0]); if(cr<=0) return false;
+  }
+  return true;
+}
+function grabGray(){
+  const vw=video.videoWidth, vh=video.videoHeight; if(!vw) return null;
+  const W=640, H=Math.round(640*vh/vw); dC.width=W; dC.height=H; dX.drawImage(video,0,0,W,H);
+  const d=dX.getImageData(0,0,W,H).data, g=new Float32Array(W*H);
+  for(let i=0,j=0;i<g.length;i++,j+=4) g[i]=d[j]*.299+d[j+1]*.587+d[j+2]*.114;
+  boxBlur(g,W,H); boxBlur(g,W,H);
+  return {g,W,H};
+}
+// 한 가지 밝기 기준(t)으로 밝은 사각형 후보를 만들고 점수를 매깁니다.
+function quadAt(G,t,cx,cy){
+  const {g,W,H}=G, lab=new Int32Array(W*H), stack=new Int32Array(W*H);
+  const ci=Math.round(cy*(H-1))*W+Math.round(cx*(W-1));
+  let best=-1, bestArea=0, areas=[0], nl=0;
+  for(let i=0;i<W*H;i++){
+    if(lab[i]||g[i]<=t) continue;
+    nl++; let sp=0, area=0; stack[sp++]=i; lab[i]=nl;
+    while(sp){ const k=stack[--sp]; area++; const x=k%W, y=(k/W)|0;
+      if(x>0&&!lab[k-1]&&g[k-1]>t){lab[k-1]=nl;stack[sp++]=k-1;}
+      if(x<W-1&&!lab[k+1]&&g[k+1]>t){lab[k+1]=nl;stack[sp++]=k+1;}
+      if(y>0&&!lab[k-W]&&g[k-W]>t){lab[k-W]=nl;stack[sp++]=k-W;}
+      if(y<H-1&&!lab[k+W]&&g[k+W]>t){lab[k+W]=nl;stack[sp++]=k+W;} }
+    areas[nl]=area; if(area>bestArea){bestArea=area;best=nl;}
+  }
+  let L=(lab[ci] && areas[lab[ci]]>W*H*0.04) ? lab[ci] : best;
+  if(L<0||areas[L]<W*H*0.04) return null;
+  const left=[],right=[],top=[],bottom=[]; let span=0;
+  for(let y=0;y<H;y++){ let a=-1,b=-1; for(let x=0;x<W;x++) if(lab[y*W+x]===L){ if(a<0)a=x; b=x; } if(a>=0){ left.push([a,y]); right.push([b+1,y]); span+=b+1-a; } }
+  for(let x=0;x<W;x++){ let a=-1,b=-1; for(let y=0;y<H;y++) if(lab[y*W+x]===L){ if(a<0)a=y; b=y; } if(a>=0){ top.push([x,a]); bottom.push([x,b+1]); } }
+  const all=left.concat(right);
+  const ext=f=>all.reduce((m,p)=>f(p)>f(m)?p:m,all[0]);
+  const TL=ext(p=>-(p[0]+p[1])), BR=ext(p=>p[0]+p[1]), TR=ext(p=>p[0]-p[1]), BL=ext(p=>p[1]-p[0]);
+  const mid=(arr,lo,hi,idx)=>{ const r=hi-lo, a=lo+r*.12, b=hi-r*.12; return arr.filter(p=>p[idx]>=a&&p[idx]<=b); };
+  const lL=fitLine(mid(left,TL[1],BL[1],1),false), lR=fitLine(mid(right,TR[1],BR[1],1),false);
+  const lT=fitLine(mid(top,TL[0],TR[0],0),true), lB=fitLine(mid(bottom,BL[0],BR[0],0),true);
+  if(!lL||!lR||!lT||!lB) return null;
+  const Gx=(x,y)=>{ x=x<0?0:x>W-1?W-1:x|0; y=y<0?0:y>H-1?H-1:y|0; return g[y*W+x]; };
+  const Gn=(x,y)=>(x<0||y<0||x>W-1||y>H-1)?null:g[(y|0)*W+(x|0)]; // 사진 밖이면 null (v7: 가장자리 번짐 방지)
+  const at=(ln,horiz,sign,o,s)=>horiz?Gn(s, ln.a*s+ln.b+sign*o):Gn(ln.a*s+ln.b+sign*o, s);
+  const prof=(ln,horiz,sign,lo,hi,o)=>{ let a=0,b=0,n=0; for(let k=0;k<40;k++){ const s=lo+(hi-lo)*(.15+.7*k/39), u=at(ln,horiz,sign,o-2,s), v=at(ln,horiz,sign,o+2,s); if(u==null||v==null) continue; a+=u; b+=v; n++; } return n>=30?[a/n,b/n]:null; };
+  // 밝은 영역 바깥의 어두운 제목줄 등은 베젤(가장 어두운 테두리)까지 넓힘 — v7: 최대 8%, 사진 밖 금지, 베젤 두께 확인
+  const grow=(ln,horiz,sign,lo,hi)=>{
+    const maxO=Math.round((horiz?H:W)*0.08), P=[];
+    for(let o=0;o<=maxO+5;o++){ const r=prof(ln,horiz,sign,lo,hi,o); if(!r) break; P.push(r); }
+    if(P.length<6) return ln.b;
+    const darkT=Math.min(...P.map(r=>r[1]))+25; let pick=0;
+    for(let o=1;o<=Math.min(maxO,P.length-5);o++){ const [i1,o1]=P[o], far=P[o+4][1];
+      if(i1-o1>20 && o1<darkT && far<darkT && P[Math.max(0,o-3)][0]>o1+20) pick=o; }
+    return ln.b+sign*pick;
+  };
+  // v7: 각 변을 ±1% 안에서 밝기 경계가 가장 뚜렷한 위치로 미세 조정
+  const snap=(ln,horiz,sign,lo,hi)=>{
+    const R=Math.max(3,Math.round((horiz?H:W)*0.01)); let best=-1e9, bo=0;
+    for(let o=-R;o<=R;o++){ const r=prof(ln,horiz,sign,lo,hi,o); if(r && r[0]-r[1]>best){ best=r[0]-r[1]; bo=o; } }
+    return ln.b+sign*bo;
+  };
+  lL.b=grow(lL,false,-1,TL[1],BL[1]); lR.b=grow(lR,false,1,TR[1],BR[1]); lT.b=grow(lT,true,-1,TL[0],TR[0]); lB.b=grow(lB,true,1,BL[0],BR[0]);
+  lL.b=snap(lL,false,-1,TL[1],BL[1]); lR.b=snap(lR,false,1,TR[1],BR[1]); lT.b=snap(lT,true,-1,TL[0],TR[0]); lB.b=snap(lB,true,1,BL[0],BR[0]);
+  const X=(v,h)=>{ const x=(v.a*h.b+v.b)/(1-v.a*h.a); return [x, h.a*x+h.b]; };
+  const P=[X(lL,lT),X(lR,lT),X(lR,lB),X(lL,lB)];
+  const q=P.map(([x,y])=>[x/W,y/H]);
+  if(!quadOK(q,W/H)) return null;
+  // 점수: 테두리 안팎 밝기 차이(선명한 경계) × 사각형다움 × 크기
+  let con=0,cn=0; const mx=(P[0][0]+P[1][0]+P[2][0]+P[3][0])/4, my=(P[0][1]+P[1][1]+P[2][1]+P[3][1])/4;
+  for(let s=0;s<4;s++){ const A=P[s],B=P[(s+1)%4]; for(let k=1;k<30;k++){ const f=k/30, x=A[0]+(B[0]-A[0])*f, y=A[1]+(B[1]-A[1])*f, dx=mx-x, dy=my-y, dl=Math.hypot(dx,dy)||1;
+    con+=Math.abs(Gx(x+dx/dl*3,y+dy/dl*3)-Gx(x-dx/dl*3,y-dy/dl*3)); cn++; } }
+  const fill=Math.min(1, span/(quadArea(P)||1));
+  return {q, score:(con/cn)*fill*fill*Math.sqrt(quadArea(q)), fill};
+}
+// 화면(또는 화면 속 문서)의 사각형을 찾아 네 모서리를 0~1 좌표로 돌려줍니다. 실패하면 null.
+function detectQuad(near){
+  const G=grabGray(); if(!G) return null;
+  let cx=.5, cy=.5; if(near){ cx=near.reduce((a,p)=>a+p[0],0)/4; cy=near.reduce((a,p)=>a+p[1],0)/4; }
+  const {g,W,H}=G, t0=otsu(g);
+  // 가운데 영역만의 기준도 함께 시도(주변 조명·책상에 휘둘리지 않게)
+  const cv=[]; for(let y=Math.round(H*.2);y<H*.8;y+=2) for(let x=Math.round(W*.2);x<W*.8;x+=2) cv.push(g[y*W+x]);
+  const t1=otsu(cv);
+  const ts=[...new Set([t0,t1,Math.round((t0+t1)/2),t0-25,t0+25].map(t=>Math.max(15,Math.min(240,Math.round(t)))))];
+  let best=null;
+  for(const t of ts){ const r=quadAt(G,t,cx,cy); if(r && r.fill>0.8 && (!best||r.score>best.score)) best=r; }
+  if(!best) return null;
+  const q=best.q, mx=q.reduce((a,p)=>a+p[0],0)/4, my=q.reduce((a,p)=>a+p[1],0)/4, IN=0.005+S.inset/100;
+  return q.map(([x,y])=>[x+(mx-x)*IN*2, y+(my-y)*IN*2]);
+}
+function medianQuad(list){
+  if(!list.length) return null;
+  const med=a=>{ const b=[...a].sort((x,y)=>x-y); return b[b.length>>1]; };
+  const m=[0,1,2,3].map(i=>[med(list.map(q=>q[i][0])),med(list.map(q=>q[i][1]))]);
+  const agree=list.filter(q=>q.every((p,i)=>Math.abs(p[0]-m[i][0])<0.02&&Math.abs(p[1]-m[i][1])<0.02));
+  return agree.length>=Math.ceil(list.length/2) ? m : null;
+}
+function fitRetry(n){ // v7: 카메라 노출이 안정될 때까지 최대 5번 다시 시도
+  const waits=[900,1600,2500,3500,5000];
+  setTimeout(()=>{ if(mode==='none') return; if(autoFit(true)){ toast('문서 테두리를 자동으로 맞췄어요.'); return; } if(n<waits.length-1) fitRetry(n+1); else toast('테두리를 못 찾았어요. 모서리를 직접 맞추거나 [테두리 자동 맞춤]을 다시 눌러 주세요.'); }, waits[n]);
+}
+function autoFit(silent){
+  const hits=[]; for(let k=0;k<3;k++){ const q=detectQuad(null); if(q) hits.push(q); }
+  const q=medianQuad(hits);
+  if(q){ corners=q; ls.set('scan.corners',corners); drawOverlay(); if(running){ smooth=null; refSig=signature(); prevSig=refSig; phase='watch'; } if(!silent) toast('테두리를 자동으로 맞췄어요.'); return true; }
+  if(!silent) toast('테두리를 찾지 못했어요. 화면이 밝을 때 다시 누르거나 모서리를 직접 끌어 주세요.');
+  return false;
+}
+let lastCrop=null, lastCropT=0, lastHow='manual', cornersMoved=false;
+let capturing=Promise.resolve();
+function capture(){ capturing=capturing.then(doCapture).catch(e=>{ console.error(e); toast('찍기 실패: '+(e&&e.message||e)); $('#hint').textContent='찍기 실패: '+(e&&e.message||e)+' — 해상도를 낮춰 보세요.'; }); return capturing; }
+const nextFrame=()=>new Promise(r=>{ let done=false; const f=()=>{ if(!done){ done=true; r(); } }; if(video.requestVideoFrameCallback) video.requestVideoFrameCallback(f); setTimeout(f,90); });
+async function doCapture(){
+  const vw=video.videoWidth, vh=video.videoHeight; if(!vw) return;
+  // v7: ① 먼저 화면 전체에서 문서 테두리를 3번 찾아 중간값 사용(예전 모서리 위치에 묶이지 않음)
+  let crop=corners, how='manual';
+  if(S.autoEach){
+    const hits=[]; for(let k=0;k<(mode==='live'?3:1);k++){ if(k) await nextFrame(); const q=detectQuad(null); if(q) hits.push(q); }
+    const dq=medianQuad(hits)||hits[0]||null;
+    if(dq){ crop=dq; how='auto';
+      if(dq.some((p,i)=>Math.abs(p[0]-corners[i][0])>0.01||Math.abs(p[1]-corners[i][1])>0.01)){ corners=dq; ls.set('scan.corners',corners); cornersMoved=true; } }
+  }
+  lastCrop=crop; lastHow=how; lastCropT=performance.now(); drawOverlay(); setTimeout(drawOverlay,1300);
+  // ② 찾은 테두리 범위만 여러 장 겹쳐(평균) 잡음·깜빡임 줄이기
+  const K=(mode==='live'&&S.stack)?5:1, E=0.01;
+  const xs=crop.map(p=>p[0]), ys=crop.map(p=>p[1]);
+  const bx=Math.max(0,Math.floor((Math.min(...xs)-E)*vw)), by=Math.max(0,Math.floor((Math.min(...ys)-E)*vh));
+  const bw=Math.min(vw,Math.ceil((Math.max(...xs)+E)*vw))-bx, bh=Math.min(vh,Math.ceil((Math.max(...ys)+E)*vh))-by;
+  fullC.width=bw; fullC.height=bh;
+  const sum=K>1?new Uint16Array(bw*bh*3):null; let src=null;
+  for(let k=0;k<K;k++){
+    if(k) await nextFrame();
+    fX.drawImage(video,bx,by,bw,bh,0,0,bw,bh);
+    src=fX.getImageData(0,0,bw,bh);
+    if(sum){ const d=src.data; for(let i=0,j=0;j<sum.length;i+=4,j+=3){ sum[j]+=d[i]; sum[j+1]+=d[i+1]; sum[j+2]+=d[i+2]; } }
+  }
+  if(sum){ const d=src.data; for(let i=0,j=0;j<sum.length;i+=4,j+=3){ d[i]=sum[j]/K; d[i+1]=sum[j+1]/K; d[i+2]=sum[j+2]/K; } }
+  const q=crop.map(([x,y])=>[x*vw-bx,y*vh-by]);
+  const dist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
+  let W=Math.max(dist(q[0],q[1]),dist(q[3],q[2])), H=Math.max(dist(q[0],q[3]),dist(q[1],q[2]));
+  const sc=Math.min(1,S.maxEdge/Math.max(W,H)); W=Math.max(8,Math.round(W*sc)); H=Math.max(8,Math.round(H*sc));
+  // 2) 원근 보정(축소할 땐 2×2 슈퍼샘플링) → 모아레 완화 → 배경 평탄화·선명화
+  const img=warp(src,q,W,H, sc<0.72?2:1);
+  src=null; fullC.width=fullC.height=1;
+  if(S.moire) blur(img);
+  enhance(img,S.look);
+  outC.width=W; outC.height=H; oX.putImageData(img,0,0);
+  const rot=rotNeeded(), fin=rot?rotateCanvas(outC,rot):outC;
+  const page=Object.assign({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6), t:Date.now()}, await encodePage(fin));
+  pages.push(page); dbPut(page); renderPages();
+  const f=$('#flash'); f.classList.add('on'); requestAnimationFrame(()=>requestAnimationFrame(()=>f.classList.remove('on')));
+  setStatus('shot', pages.length+'번 저장');
+  $('#hint').textContent = how==='auto' ? `${pages.length}번: 문서 테두리를 자동으로 찾아 잘랐어요.` : `${pages.length}번: 테두리를 못 찾아 파란 모서리 위치로 잘랐어요. 모서리를 문서에 맞춰 주세요.`;
+}
+
+
+/* ---------- orientation (폰을 세로/가로로 둔 방향 따라 결과 회전) ---------- */
+function rotateCanvas(src,ccw){ // ccw: 90 | 180 | 270 (반시계 방향 각도)
+  const c=document.createElement('canvas'), x=c.getContext('2d'), w=src.width, h=src.height;
+  if(ccw===180){ c.width=w; c.height=h; x.translate(w,h); x.rotate(Math.PI); }
+  else if(ccw===90){ c.width=h; c.height=w; x.translate(0,w); x.rotate(-Math.PI/2); }
+  else { c.width=h; c.height=w; x.translate(h,0); x.rotate(Math.PI/2); }
+  x.drawImage(src,0,0); return c;
+}
+async function encodePage(cv){
+  let blob=await new Promise(r=>{ try{ cv.toBlob(r,'image/jpeg',0.93); }catch(e){ r(null); } });
+  if(!blob) blob=await (await fetch(cv.toDataURL('image/jpeg',0.93))).blob();
+  const buf=await blob.arrayBuffer(), W=cv.width, H=cv.height;
+  const tc=document.createElement('canvas'), tw=Math.min(320,Math.round(320*W/H*1.0)||320), th=Math.round(tw*H/W); tc.width=tw; tc.height=th;
+  tc.getContext('2d').drawImage(cv,0,0,tw,th);
+  return {w:W, h:H, buf, thumb:tc.toDataURL('image/jpeg',0.7)};
+}
+const motion={x:0,y:0,ok:false,phys:0}; let upSign=ls.get('scan.upSign',-1), upCal=false, motionOn=false;
+function uiAngle(){ let a=(screen.orientation&&typeof screen.orientation.angle==='number')?screen.orientation.angle:(typeof window.orientation==='number'?window.orientation:0); return ((a%360)+360)%360; }
+function onMotion(e){
+  const g=e.accelerationIncludingGravity; if(!g||g.x==null) return;
+  const x=g.x, y=g.y; if(Math.hypot(x,y)<4) return; // 거의 눕혀 둔 상태면 이전 방향 유지
+  if(!upCal && uiAngle()===0 && Math.abs(y)>8 && Math.abs(x)<3 && innerHeight>innerWidth){ upSign=Math.sign(y); upCal=true; ls.set('scan.upSign',upSign); }
+  motion.x=x; motion.y=y; motion.ok=true;
+  motion.phys = Math.abs(y)>=Math.abs(x) ? (y*upSign>0?0:180) : (x*upSign>0?90:270);
+  showOrient();
+}
+async function enableMotion(){
+  if(motionOn) return;
+  try{ if(typeof DeviceMotionEvent!=='undefined' && typeof DeviceMotionEvent.requestPermission==='function'){ const r=await DeviceMotionEvent.requestPermission(); if(r!=='granted') return; } }catch(e){ return; }
+  window.addEventListener('devicemotion',onMotion); motionOn=true;
+}
+function rotNeeded(){
+  if(S.orient!=='auto') return +S.orient;
+  if(mode!=='live'||!motion.ok) return 0;
+  return ((motion.phys-uiAngle())%360+360)%360;
+}
+let lastOr='';
+function rebase(){ if(!cornersMoved) return; cornersMoved=false; smooth=null; const s2=signature(); if(s2){ refSig=s2; prevSig=s2; } }
+function showOrient(){
+  const r=rotNeeded(), phys=S.orient==='auto'&&mode==='live'&&motion.ok ? motion.phys : null;
+  const txt = phys==null ? (S.orient==='auto'?'방향 자동':'방향 고정') : ((phys===0||phys===180)?'세로로 촬영':'가로로 촬영') + (r?` · ${r===180?'180°':r===90?'왼쪽 90°':'오른쪽 90°'} 돌려 저장`:'');
+  if(txt!==lastOr){ lastOr=txt; $('#orient').textContent=txt; }
+}
+async function rotatePage(p,cw){
+  const bmp=await createImageBitmap(new Blob([p.buf],{type:'image/jpeg'}));
+  const c=document.createElement('canvas'); c.width=bmp.width; c.height=bmp.height; c.getContext('2d').drawImage(bmp,0,0);
+  Object.assign(p, await encodePage(rotateCanvas(c, cw?270:90))); dbPut(p); renderPages();
+}
+
+/* ---------- storage (IndexedDB, best effort) ---------- */
+let dbh=null;
+function dbOpen(){ return new Promise(res=>{ try{ const r=indexedDB.open('screen-scan',1); r.onupgradeneeded=()=>r.result.createObjectStore('pages',{keyPath:'id'}); r.onsuccess=()=>res(r.result); r.onerror=()=>res(null); }catch(e){ res(null); } }); }
+function dbPut(p){ try{ dbh&&dbh.transaction('pages','readwrite').objectStore('pages').put(p); }catch(e){} }
+function dbDel(id){ try{ dbh&&dbh.transaction('pages','readwrite').objectStore('pages').delete(id); }catch(e){} }
+function dbClear(){ try{ dbh&&dbh.transaction('pages','readwrite').objectStore('pages').clear(); }catch(e){} }
+function dbAll(){ return new Promise(res=>{ try{ if(!dbh) return res([]); const r=dbh.transaction('pages').objectStore('pages').getAll(); r.onsuccess=()=>res(r.result||[]); r.onerror=()=>res([]); }catch(e){ res([]); } }); }
+
+/* ---------- pages UI ---------- */
+function renderPages(){
+  const box=$('#pages'); box.textContent='';
+  if(!pages.length){ const p=document.createElement('div'); p.className='nopages'; p.textContent='아직 없습니다. 스캔을 시작하면 1번부터 여기에 쌓입니다.'; box.append(p); }
+  pages.forEach((p,i)=>{
+    const el=document.createElement('div'); el.className='pg';
+    const img=document.createElement('img'); img.src=p.thumb; img.alt=(i+1)+'번 페이지'; img.onclick=()=>{ const u=URL.createObjectURL(new Blob([p.buf],{type:'image/jpeg'})); $('#viewImg').src=u; $('#viewer').hidden=false; $('#viewer').onclick=()=>{ $('#viewer').hidden=true; URL.revokeObjectURL(u); }; };
+    const n=document.createElement('span'); n.className='n'; n.textContent=i+1;
+    const meta=document.createElement('div'); meta.className='meta';
+    const s=document.createElement('span'); s.textContent=`${p.w}×${p.h}`;
+    const del=document.createElement('button'); del.textContent='삭제'; del.setAttribute('aria-label',(i+1)+'번 삭제');
+    del.onclick=()=>{ pages.splice(i,1); dbDel(p.id); renderPages(); toast(`${i+1}번을 지웠어요. 뒤 번호가 당겨집니다.`); };
+    const rb=document.createElement('button'); rb.textContent='↻'; rb.title='오른쪽으로 90° 돌리기'; rb.setAttribute('aria-label',(i+1)+'번 오른쪽으로 돌리기');
+    rb.onclick=()=>rotatePage(p,true).catch(()=>toast('돌리지 못했어요.'));
+    const bt=document.createElement('span'); bt.style.cssText='display:flex;gap:4px'; bt.append(rb,del);
+    meta.append(s,bt); el.append(img,n,meta); box.append(el);
+  });
+  $('#count').textContent=pages.length+'장';
+  const has=pages.length>0; $('#btnPdf').disabled=!has; $('#btnZip').disabled=!has; $('#btnClear').disabled=!has;
+  box.scrollTop=box.scrollHeight;
+}
+
+/* ---------- PDF ---------- */
+const enc=new TextEncoder();
+function buildPdf(list){ // list: [{buf,w,h,num}]
+  const parts=[], offs=[]; let pos=0;
+  const put=x=>{ const b=typeof x==='string'?enc.encode(x):x; parts.push(b); pos+=b.byteLength; };
+  put('%PDF-1.4\n'); put(new Uint8Array([37,226,227,207,211,10]));
+  const nObj=3+list.length*3;
+  const kids=list.map((_,i)=>`${4+i*3} 0 R`).join(' ');
+  offs[1]=pos; put('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+  offs[2]=pos; put(`2 0 obj\n<< /Type /Pages /Kids [${kids}] /Count ${list.length} >>\nendobj\n`);
+  offs[3]=pos; put('3 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\nendobj\n');
+  list.forEach((p,i)=>{
+    const po=4+i*3, io=po+1, co=po+2;
+    const L=842, pw=p.w>=p.h?L:L*p.w/p.h, ph=p.w>=p.h?L*p.h/p.w:L;
+    const f=v=>v.toFixed(2);
+    let cs=`q ${f(pw)} 0 0 ${f(ph)} 0 0 cm /Im0 Do Q\n`;
+    if(S.stamp){
+      const t=String(p.num), fs=12, tw=t.length*fs*0.6, bw=tw+12, bh=fs+8, bx=pw-bw-10, by=10;
+      cs+=`q 1 1 1 rg ${f(bx)} ${f(by)} ${f(bw)} ${f(bh)} re f Q\nBT /F1 ${fs} Tf 0 0 0 rg ${f(bx+6)} ${f(by+5)} Td (${t}) Tj ET\n`;
+    }
+    const cb=enc.encode(cs);
+    offs[po]=pos; put(`${po} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(pw)} ${f(ph)}] /Resources << /XObject << /Im0 ${io} 0 R >> /Font << /F1 3 0 R >> >> /Contents ${co} 0 R >>\nendobj\n`);
+    offs[io]=pos; put(`${io} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${p.w} /Height ${p.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.buf.byteLength} >>\nstream\n`);
+    put(new Uint8Array(p.buf)); put('\nendstream\nendobj\n');
+    offs[co]=pos; put(`${co} 0 obj\n<< /Length ${cb.byteLength} >>\nstream\n`); put(cb); put('\nendstream\nendobj\n');
+  });
+  const xref=pos;
+  let x=`xref\n0 ${nObj+1}\n0000000000 65535 f \n`;
+  for(let k=1;k<=nObj;k++) x+=String(offs[k]).padStart(10,'0')+' 00000 n \n';
+  put(x); put(`trailer\n<< /Size ${nObj+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  return new Blob(parts,{type:'application/pdf'});
+}
+
+/* ---------- ZIP (stored) ---------- */
+const CRC=(()=>{ const t=new Uint32Array(256); for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c=c&1?0xEDB88320^(c>>>1):c>>>1; t[n]=c>>>0; } return t; })();
+function crc32(u){ let c=0xFFFFFFFF; for(let i=0;i<u.length;i++) c=CRC[(c^u[i])&255]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
+function buildZip(files){ // [{name, data:Uint8Array}]
+  const parts=[], cen=[]; let off=0;
+  const d=new Date(), dt=((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate(), tm=(d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1);
+  for(const f of files){
+    const nm=enc.encode(f.name), crc=crc32(f.data), sz=f.data.length;
+    const h=new DataView(new ArrayBuffer(30));
+    h.setUint32(0,0x04034b50,true); h.setUint16(4,20,true); h.setUint16(6,0x0800,true); h.setUint16(8,0,true);
+    h.setUint16(10,tm,true); h.setUint16(12,dt,true); h.setUint32(14,crc,true); h.setUint32(18,sz,true); h.setUint32(22,sz,true);
+    h.setUint16(26,nm.length,true); h.setUint16(28,0,true);
+    parts.push(h.buffer,nm,f.data);
+    const c=new DataView(new ArrayBuffer(46));
+    c.setUint32(0,0x02014b50,true); c.setUint16(4,20,true); c.setUint16(6,20,true); c.setUint16(8,0x0800,true); c.setUint16(10,0,true);
+    c.setUint16(12,tm,true); c.setUint16(14,dt,true); c.setUint32(16,crc,true); c.setUint32(20,sz,true); c.setUint32(24,sz,true);
+    c.setUint16(28,nm.length,true); c.setUint32(42,off,true);
+    cen.push(c.buffer,nm);
+    off+=30+nm.length+sz;
+  }
+  const cenSize=cen.reduce((a,b)=>a+b.byteLength,0);
+  const e=new DataView(new ArrayBuffer(22));
+  e.setUint32(0,0x06054b50,true); e.setUint16(8,files.length,true); e.setUint16(10,files.length,true); e.setUint32(12,cenSize,true); e.setUint32(16,off,true);
+  return new Blob([...parts,...cen,e.buffer],{type:'application/zip'});
+}
+
+/* ---------- saving ---------- */
+const dlP = (window.claude && typeof window.claude.use==='function') ? window.claude.use('downloads').catch(()=>null) : Promise.resolve(null);
+async function saveFile(name, blob){
+  const dl=await dlP;
+  if(dl){
+    try{ await dl.save({filename:name, data:blob}); toast(name+' 저장 완료'); }
+    catch(e){ toast(e&&e.code==='declined'?'저장을 취소했어요.':'저장하지 못했어요: '+(e&&e.message||'알 수 없는 오류')); }
+    return;
+  }
+  const file=new File([blob],name,{type:blob.type});
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file]}); return; }catch(e){ if(e&&e.name==='AbortError') return; }
+  }
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.append(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),60000);
+}
+const stamp=()=>{ const d=new Date(), z=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}${z(d.getMonth()+1)}${z(d.getDate())}_${z(d.getHours())}${z(d.getMinutes())}`; };
+const pad=n=>String(n).padStart(Math.max(3,String(pages.length).length),'0');
+
+$('#btnPdf').onclick=async()=>{
+  toast('PDF 만드는 중…');
+  const blob=buildPdf(pages.map((p,i)=>({buf:p.buf,w:p.w,h:p.h,num:i+1})));
+  await saveFile(`${S.prefix}_${stamp()}_1-${pages.length}.pdf`, blob);
+};
+$('#btnZip').onclick=async()=>{
+  toast('번호별 PDF 만드는 중…');
+  const files=[];
+  for(let i=0;i<pages.length;i++){
+    const p=pages[i], b=buildPdf([{buf:p.buf,w:p.w,h:p.h,num:i+1}]);
+    files.push({name:`${S.prefix}_${pad(i+1)}.pdf`, data:new Uint8Array(await b.arrayBuffer())});
+  }
+  await saveFile(`${S.prefix}_${stamp()}.zip`, buildZip(files));
+};
+$('#btnClear').onclick=()=>{ $('#clearAsk').hidden=false; };
+$('#clearNo').onclick=()=>{ $('#clearAsk').hidden=true; };
+$('#clearYes').onclick=()=>{ pages=[]; dbClear(); renderPages(); $('#clearAsk').hidden=true; resetDetect(); toast('모두 지웠어요. 다음 장이 1번입니다.'); };
+
+/* ---------- overlay / corners ---------- */
+const ctx=ov.getContext('2d');
+function sizeOverlay(){ const r=ov.getBoundingClientRect(), dpr=window.devicePixelRatio||1; ov.width=Math.round(r.width*dpr); ov.height=Math.round(r.height*dpr); drawOverlay(); }
+function drawOverlay(){
+  if(ov.hidden) return;
+  const W=ov.width, H=ov.height, dpr=window.devicePixelRatio||1; ctx.clearRect(0,0,W,H);
+  const P=corners.map(([x,y])=>[x*W,y*H]);
+  ctx.fillStyle='rgba(0,0,0,.45)'; ctx.beginPath(); ctx.rect(0,0,W,H);
+  ctx.moveTo(P[0][0],P[0][1]); for(let i=3;i>=1;i--) ctx.lineTo(P[i][0],P[i][1]); ctx.closePath(); ctx.fill('evenodd');
+  ctx.strokeStyle='#6F94FF'; ctx.lineWidth=2*dpr; ctx.beginPath(); P.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y)); ctx.closePath(); ctx.stroke();
+  if(lastCrop && performance.now()-lastCropT<1200){ ctx.strokeStyle=lastHow==='auto'?'#4CC38A':'#E3A847'; ctx.lineWidth=3*dpr; ctx.beginPath(); lastCrop.forEach(([x,y],i)=>i?ctx.lineTo(x*W,y*H):ctx.moveTo(x*W,y*H)); ctx.closePath(); ctx.stroke(); }
+  P.forEach(([x,y])=>{ ctx.beginPath(); ctx.arc(x,y,13*dpr,0,Math.PI*2); ctx.fillStyle='rgba(111,148,255,.35)'; ctx.fill(); ctx.lineWidth=2.5*dpr; ctx.strokeStyle='#fff'; ctx.stroke(); ctx.beginPath(); ctx.arc(x,y,3*dpr,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill(); });
+}
+let drag=-1;
+ov.addEventListener('pointerdown',e=>{
+  const r=ov.getBoundingClientRect(), x=(e.clientX-r.left)/r.width, y=(e.clientY-r.top)/r.height;
+  let best=-1, bd=1e9; corners.forEach(([cx,cy],i)=>{ const d=Math.hypot((cx-x)*r.width,(cy-y)*r.height); if(d<bd){bd=d;best=i;} });
+  if(bd<60){ drag=best; ov.setPointerCapture(e.pointerId); e.preventDefault(); }
+});
+ov.addEventListener('pointermove',e=>{
+  if(drag<0) return; const r=ov.getBoundingClientRect();
+  corners[drag]=[Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)), Math.min(1,Math.max(0,(e.clientY-r.top)/r.height))];
+  drawOverlay();
+});
+const endDrag=()=>{ if(drag<0) return; drag=-1; ls.set('scan.corners',corners); if(running){ refSig=signature(); prevSig=refSig; phase='watch'; } };
+ov.addEventListener('pointerup',endDrag); ov.addEventListener('pointercancel',endDrag);
+window.addEventListener('resize',()=>{ if(!ov.hidden) sizeOverlay(); });
+$('#btnAuto').onclick=()=>autoFit(false);
+$('#btnReset').onclick=()=>{ corners=[[.06,.06],[.94,.06],[.94,.94],[.06,.94]]; ls.set('scan.corners',corners); drawOverlay(); };
+
+function sourceReady(){
+  stage.style.setProperty('--ar', (video.videoWidth/video.videoHeight)||1.333);
+  $('#empty').hidden=true; ov.hidden=false;
+  requestAnimationFrame(sizeOverlay);
+  $('#btnRun').disabled=false; $('#btnShot').disabled=false; $('#btnReset').disabled=false; $('#btnAuto').disabled=false;
+  corners=[[.03,.03],[.97,.03],[.97,.97],[.03,.97]]; drawOverlay(); fitRetry(0);
+  setStatus('idle','준비됨');
+}
+
+/* ---------- live camera ---------- */
+$('#btnCam').onclick=async()=>{
+  enableMotion();
+  stopRun();
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+  try{
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia) throw new Error('no-media');
+    stream=await navigator.mediaDevices.getUserMedia({audio:false, video:{facingMode:{ideal:'environment'}, width:{ideal:3840}, height:{ideal:2160}}});
+  }catch(e){ $('#camNote').hidden=false; toast('카메라를 켤 수 없어요. 아래 안내를 봐 주세요.'); return; }
+  $('#camNote').hidden=true;
+  try{
+    const tr=stream.getVideoTracks()[0], cap=tr.getCapabilities?tr.getCapabilities():{};
+    if(cap.focusMode&&cap.focusMode.includes('continuous')) tr.applyConstraints({advanced:[{focusMode:'continuous'}]}).catch(()=>{});
+    if(cap.zoom&&cap.zoom.max>cap.zoom.min){ const z=$('#zoom'); z.min=cap.zoom.min; z.max=Math.min(cap.zoom.max,5); z.step=cap.zoom.step||0.1; z.value=(tr.getSettings().zoom||cap.zoom.min);
+      $('#zoomField').hidden=false; $('#zoomO').textContent=(+z.value).toFixed(1)+'×';
+      z.oninput=()=>{ $('#zoomO').textContent=(+z.value).toFixed(1)+'×'; tr.applyConstraints({advanced:[{zoom:+z.value}]}).catch(()=>{}); };
+      z.onchange=()=>setTimeout(()=>autoFit(true),600); }
+  }catch(e){}
+  video.removeAttribute('src'); video.srcObject=stream; video.muted=true;
+  await video.play().catch(()=>{});
+  if(!video.videoWidth) await new Promise(r=>video.addEventListener('loadedmetadata',r,{once:true}));
+  mode='live'; $('#btnRun').textContent='자동 스캔 시작'; $('#progWrap').hidden=true;
+  sourceReady();
+  $('#hint').textContent=`카메라 ${video.videoWidth}×${video.videoHeight}. 모서리를 모니터 테두리에 맞춘 뒤 자동 스캔을 시작하세요.`;
+};
+
+/* ---------- recorded video ---------- */
+$('#fileIn').onchange=async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  stopRun();
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+  video.srcObject=null; video.src=URL.createObjectURL(f); video.muted=true;
+  await new Promise(r=>{ video.addEventListener('loadeddata',r,{once:true}); video.load(); });
+  try{ await video.play(); video.pause(); }catch(err){}
+  await seek(Math.min(0.1,video.duration||0));
+  mode='file'; $('#btnRun').textContent='영상 분석 시작'; $('#progWrap').hidden=false; $('#prog').style.width='0';
+  sourceReady();
+  $('#hint').textContent=`영상 ${Math.round(video.duration)}초. 모서리를 화면 테두리에 맞춘 뒤 ‘영상 분석 시작’을 누르세요.`;
+  e.target.value='';
+};
+function seek(t){ return new Promise(res=>{ let done=false; const fin=()=>{ if(done) return; done=true; video.removeEventListener('seeked',fin); res(); }; video.addEventListener('seeked',fin); video.currentTime=t; setTimeout(fin,3000); }); }
+
+/* ---------- run / stop ---------- */
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function lockWake(){ try{ wake=await navigator.wakeLock.request('screen'); }catch(e){ wake=null; } }
+function stopRun(){ running=false; try{ wake&&wake.release(); }catch(e){} wake=null; const b=$('#btnRun'); b.classList.remove('stop'); b.textContent=mode==='file'?'영상 분석 시작':'자동 스캔 시작'; setStatus('idle', mode==='none'?'대기':'멈춤'); }
+$('#btnRun').onclick=async()=>{
+  if(mode==='live') enableMotion();
+  if(running){ stopRun(); return; }
+  running=true; resetDetect(); lockWake();
+  if(mode==='live' && S.autoEach) autoFit(true);
+  const b=$('#btnRun'); b.classList.add('stop'); b.textContent=mode==='file'?'분석 멈추기':'자동 스캔 멈추기';
+  if(mode==='live'){
+    while(running && mode==='live'){ await tick(performance.now()); await sleep(120); }
+  } else if(mode==='file'){
+    const dur=video.duration, step=0.2;
+    for(let t=0; t<=dur && running; t+=step){
+      await seek(t); await tick(t*1000);
+      $('#prog').style.width=(t/dur*100).toFixed(1)+'%';
+    }
+    if(running && phase==='changing' && refSig && changed(signature(),refSig)>S.thr){ refSig=signature(); await capture(); }
+    await capturing;
+    if(running){ $('#prog').style.width='100%'; toast(`분석 끝. 모두 ${pages.length}장입니다.`); }
+    stopRun();
+  }
+};
+$('#btnShot').onclick=async()=>{ await capture(); refSig=signature(); prevSig=refSig; phase='watch'; };
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && running) lockWake(); });
+
+/* ---------- phone dock ---------- */
+function syncDock(){
+  const r=$('#btnRun'), d=$('#dRun');
+  d.textContent=r.textContent; d.disabled=r.disabled; d.className=r.classList.contains('stop')?'stop':'primary';
+  $('#dShot').disabled=$('#btnShot').disabled;
+  $('#dSave').disabled=!pages.length; $('#dSave').textContent='저장 '+pages.length+'장';
+}
+new MutationObserver(syncDock).observe($('#btnRun'),{attributes:true,childList:true,characterData:true,subtree:true});
+new MutationObserver(syncDock).observe($('#btnShot'),{attributes:true});
+new MutationObserver(syncDock).observe($('#count'),{childList:true,characterData:true,subtree:true});
+$('#dRun').onclick=()=>$('#btnRun').click();
+$('#dShot').onclick=()=>$('#btnShot').click();
+$('#dSave').onclick=()=>{ $('#pages').scrollIntoView({behavior:'smooth',block:'center'}); };
+
+/* 폰을 가로·세로로 돌리면 영상 비율이 바뀌므로 화면과 테두리를 다시 맞춥니다 */
+video.addEventListener('resize',()=>{
+  if(!video.videoWidth||mode==='none') return;
+  stage.style.setProperty('--ar',video.videoWidth/video.videoHeight);
+  requestAnimationFrame(()=>{ sizeOverlay(); if(mode==='live') setTimeout(()=>autoFit(true),500); });
+});
+window.addEventListener('orientationchange',()=>setTimeout(()=>{ if(!ov.hidden) sizeOverlay(); },400));
+
+/* ---------- boot ---------- */
+bindSettings(); renderPages(); syncDock();
+dbOpen().then(async h=>{ dbh=h; const all=await dbAll(); if(all.length){ pages=all.sort((a,b)=>a.t-b.t); renderPages(); toast(`이전에 스캔한 ${pages.length}장을 불러왔어요.`); } });
+})();
+</script>
+
+</body></html>
