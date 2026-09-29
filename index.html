@@ -94,6 +94,9 @@ select,input[type=text]{font:inherit;font-size:14px;padding:9px 10px;border-radi
 .confirm{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13.5px}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:calc(100% - 32px)}
 .toast.on{opacity:1}
+.pages.selecting .pg{outline:2px dashed var(--line)}
+.pg.picked{outline:3px solid var(--rec)!important}
+.pg.picked::after{content:'✓';position:absolute;right:6px;top:6px;width:28px;height:28px;border-radius:50%;background:var(--rec);color:#fff;font:700 16px/28px var(--sans);text-align:center}
 .changes summary{cursor:pointer;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
 .changes .ver{font:500 12px var(--mono);color:var(--accent)}
 .chg{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:8px;font-size:13.5px;max-width:65ch}
@@ -125,7 +128,7 @@ select,input[type=text]{font:inherit;font-size:14px;padding:9px 10px;border-radi
 </style>
 
 <header class="top">
-  <h1>화면 페이지 스캐너 <span style="font:500 12px var(--mono);color:var(--accent)">v7</span></h1>
+  <h1>화면 페이지 스캐너 <span style="font:500 12px var(--mono);color:var(--accent)">v8</span></h1>
   <p>아이폰·아이패드로 모니터를 비추면, 화면이 바뀔 때마다 자동으로 찍어 1번부터 번호를 붙이고 PDF로 저장합니다.</p>
 </header>
 
@@ -175,7 +178,15 @@ select,input[type=text]{font:inherit;font-size:14px;padding:9px 10px;border-radi
 
   <section class="col">
     <details class="panel changes" id="changes">
-      <summary><b>업데이트 내역</b> <span class="ver">v7 · 9월 29일</span></summary>
+      <summary><b>업데이트 내역</b> <span class="ver">v8 · 9월 29일</span></summary>
+      <p class="chg-prev" style="font-weight:600;color:var(--ink)">v8</p>
+      <ol class="chg">
+        <li><b>키보드·조명이 찍히던 문제 수정</b> — 가로로 길쭉한 밝은 띠(노트북 키보드, 천장 조명)를 문서로 잘못 잡았어요. 이제 문서·화면 비율(가로:세로 0.38~2.6)이 아니거나 너무 작은 사각형은 버리고, 카메라 화면 가운데를 품은 사각형을 우선합니다.</li>
+        <li><b>문서를 못 찾으면 찍지 않고 기다림</b> — 전에는 테두리를 못 찾아도 예전 모서리 위치로 찍었어요. 이제 자동 모드에서는 문서를 찾을 때까지 다시 시도합니다(계속 실패하면 6번째에 찍음).</li>
+        <li><b>손에 들고 찍을 때 흔들림 방지</b> — 폰 움직임 센서로 폰이 0.6초 이상 멈춰야 찍어요. 5장 겹쳐 찍기는 프레임이 어긋나면 평균 대신 가장 선명한 1장을 씁니다. 앞 페이지들보다 확연히 흐리면 버리고 최대 3번 다시 찍습니다.</li>
+        <li><b>선택 삭제 추가</b> — [선택]을 누르고 지울 페이지를 눌러 체크한 뒤 [선택한 N장 지우기]. [전체 선택]도 있어요. 지우면 번호가 1번부터 다시 매겨집니다.</li>
+      </ol>
+      <p class="chg-prev" style="font-weight:600;color:var(--ink)">v7</p>
       <ol class="chg">
         <li><b>자동 테두리가 예전 모서리에 묶이던 문제 수정</b> — 전에는 찾은 테두리가 이전 파란 모서리 범위를 벗어나면 버리고 옛 모서리로 잘랐어요. 이제 매번 화면 전체에서 새로 찾고, 찾은 위치로 모서리도 갱신합니다.</li>
         <li><b>테두리가 바깥 여백까지 번지던 버그 수정</b> — 제목줄을 포함하려고 테두리를 넓히는 단계가 사진 가장자리의 어두운 부분을 모니터 테두리로 착각했어요. 넓히는 범위를 8%로 줄이고, 사진 밖은 보지 않으며, 모니터 베젤 두께가 확인될 때만 넓힙니다.</li>
@@ -245,12 +256,21 @@ select,input[type=text]{font:inherit;font-size:14px;padding:9px 10px;border-radi
     <div class="panel">
       <div class="row" style="justify-content:space-between">
         <h2>스캔한 페이지</h2>
-        <button id="btnClear" disabled style="min-height:34px;padding:4px 10px;font-size:13px">모두 지우기</button>
+        <span class="row" style="gap:6px">
+          <button id="btnSel" disabled style="min-height:34px;padding:4px 10px;font-size:13px">선택</button>
+          <button id="btnClear" disabled style="min-height:34px;padding:4px 10px;font-size:13px">모두 지우기</button>
+        </span>
       </div>
       <div class="confirm" id="clearAsk" hidden>
         <span>스캔한 페이지를 모두 지울까요?</span>
         <button class="stop" id="clearYes" style="min-height:36px;padding:4px 12px">지우기</button>
         <button id="clearNo" style="min-height:36px;padding:4px 12px">취소</button>
+      </div>
+      <div class="confirm" id="selBar" hidden>
+        <span id="selInfo">지울 페이지를 누르세요</span>
+        <button class="stop" id="selDel" disabled style="min-height:36px;padding:4px 12px">선택한 0장 지우기</button>
+        <button id="selAll" style="min-height:36px;padding:4px 12px">전체 선택</button>
+        <button id="selDone" style="min-height:36px;padding:4px 12px">완료</button>
       </div>
       <div class="pages" id="pages"></div>
       <div class="field">
@@ -367,7 +387,7 @@ async function tick(now){
     setStatus('settling','화면 떨림 측정 중');
     if(now-calib.t0>=1500 && calib.p.length>=3){
       noise=Math.min(15,p90(calib.p)); meanNoise=Math.min(30,p90(calib.m)); calib=null;
-      refSig=sig; await capture(); rebase();
+      const ok=await capture(); if(ok){ refSig=sig; rebase(); } else { refSig=null; }
     }
     diag(fr?fr.pct:0); return;
   }
@@ -380,9 +400,10 @@ async function tick(now){
     else if(++bad>=2){ stableSince=null; }
     if(stableSince==null){ setStatus('changing','화면 바뀌는 중'); return; }
     setStatus('settling','멈춤 확인 중');
+    if(mode==='live' && !phoneStill()){ stableSince=null; setStatus('changing','폰 움직임 감지'); return; }
     if(now-stableSince>=S.stable){
-      phase='watch'; stableSince=null;
-      if(changed(sig,refSig)>T){ refSig=sig; await capture(); rebase(); }
+      if(changed(sig,refSig)>T){ const ok=await capture(); if(ok){ refSig=sig; rebase(); phase='watch'; } stableSince=null; }
+      else { phase='watch'; stableSince=null; }
     }
   } else setStatus('watch', mode==='file'?'영상 분석 중':'감시 중');
 }
@@ -584,12 +605,18 @@ function quadAt(G,t,cx,cy){
   const P=[X(lL,lT),X(lR,lT),X(lR,lB),X(lL,lB)];
   const q=P.map(([x,y])=>[x/W,y/H]);
   if(!quadOK(q,W/H)) return null;
+  // v8: 문서·화면 비율(가로:세로 0.38~2.6)이 아니면 버림 → 가로로 길쭉한 키보드·조명 띠 제외
+  const qw=(Math.hypot(P[1][0]-P[0][0],P[1][1]-P[0][1])+Math.hypot(P[2][0]-P[3][0],P[2][1]-P[3][1]))/2, qh=(Math.hypot(P[3][0]-P[0][0],P[3][1]-P[0][1])+Math.hypot(P[2][0]-P[1][0],P[2][1]-P[1][1]))/2;
+  if(qw/qh>2.6||qw/qh<0.38||quadArea(q)<0.1) return null;
   // 점수: 테두리 안팎 밝기 차이(선명한 경계) × 사각형다움 × 크기
   let con=0,cn=0; const mx=(P[0][0]+P[1][0]+P[2][0]+P[3][0])/4, my=(P[0][1]+P[1][1]+P[2][1]+P[3][1])/4;
   for(let s=0;s<4;s++){ const A=P[s],B=P[(s+1)%4]; for(let k=1;k<30;k++){ const f=k/30, x=A[0]+(B[0]-A[0])*f, y=A[1]+(B[1]-A[1])*f, dx=mx-x, dy=my-y, dl=Math.hypot(dx,dy)||1;
     con+=Math.abs(Gx(x+dx/dl*3,y+dy/dl*3)-Gx(x-dx/dl*3,y-dy/dl*3)); cn++; } }
   const fill=Math.min(1, span/(quadArea(P)||1));
-  return {q, score:(con/cn)*fill*fill*Math.sqrt(quadArea(q)), fill};
+  // v8: 화면 가운데를 품은 사각형을 강하게 우선
+  const inQ=(px,py)=>{ let sg=0; for(let i=0;i<4;i++){ const a=q[i],b=q[(i+1)%4], c=(b[0]-a[0])*(py-a[1])-(b[1]-a[1])*(px-a[0]); if(c!==0){ if(sg===0) sg=Math.sign(c); else if(Math.sign(c)!==sg) return false; } } return true; };
+  const centerBonus=inQ(cx,cy)?1:0.25;
+  return {q, score:(con/cn)*fill*fill*Math.sqrt(quadArea(q))*centerBonus, fill};
 }
 // 화면(또는 화면 속 문서)의 사각형을 찾아 네 모서리를 0~1 좌표로 돌려줍니다. 실패하면 null.
 function detectQuad(near){
@@ -626,15 +653,21 @@ function autoFit(silent){
 }
 let lastCrop=null, lastCropT=0, lastHow='manual', cornersMoved=false;
 let capturing=Promise.resolve();
-function capture(){ capturing=capturing.then(doCapture).catch(e=>{ console.error(e); toast('찍기 실패: '+(e&&e.message||e)); $('#hint').textContent='찍기 실패: '+(e&&e.message||e)+' — 해상도를 낮춰 보세요.'; }); return capturing; }
+function capture(force){ capturing=capturing.then(()=>doCapture(force)).catch(e=>{ console.error(e); toast('찍기 실패: '+(e&&e.message||e)); $('#hint').textContent='찍기 실패: '+(e&&e.message||e)+' — 해상도를 낮춰 보세요.'; return false; }); return capturing; }
+let sharpHist=[], gateFails=0;
+function sharpOf(d,w,h){ let s=0,n=0; const st=3, row=w*4; for(let y=st;y<h-st;y+=st) for(let x=st;x<w-st;x+=st){ const i=(y*w+x)*4+1; s+=Math.abs(4*d[i]-d[i-4]-d[i+4]-d[i-row]-d[i+row]); n++; } return n?s/n:0; }
 const nextFrame=()=>new Promise(r=>{ let done=false; const f=()=>{ if(!done){ done=true; r(); } }; if(video.requestVideoFrameCallback) video.requestVideoFrameCallback(f); setTimeout(f,90); });
-async function doCapture(){
-  const vw=video.videoWidth, vh=video.videoHeight; if(!vw) return;
+async function doCapture(force){
+  const vw=video.videoWidth, vh=video.videoHeight; if(!vw) return false;
+  // v8: 폰이 움직이는 중이면 찍지 않고 기다림
+  if(!force && mode==='live' && !phoneStill()){ $('#hint').textContent='폰이 움직이고 있어요. 멈추면 찍습니다.'; return false; }
   // v7: ① 먼저 화면 전체에서 문서 테두리를 3번 찾아 중간값 사용(예전 모서리 위치에 묶이지 않음)
   let crop=corners, how='manual';
   if(S.autoEach){
     const hits=[]; for(let k=0;k<(mode==='live'?3:1);k++){ if(k) await nextFrame(); const q=detectQuad(null); if(q) hits.push(q); }
-    const dq=medianQuad(hits)||hits[0]||null;
+    const dq=medianQuad(hits)||(hits.length>=2||mode!=='live'?hits[0]:null)||null;
+    // v8: 자동 모드에서 문서를 못 찾으면 엉뚱한 곳(키보드 등)을 찍지 않고 다음 기회에 다시 시도
+    if(!dq && !force){ gateFails++; $('#hint').textContent='문서 테두리를 찾는 중이에요. 문서가 화면 가운데에 오게 해 주세요.'; if(gateFails<6) return false; }
     if(dq){ crop=dq; how='auto';
       if(dq.some((p,i)=>Math.abs(p[0]-corners[i][0])>0.01||Math.abs(p[1]-corners[i][1])>0.01)){ corners=dq; ls.set('scan.corners',corners); cornersMoved=true; } }
   }
@@ -645,14 +678,27 @@ async function doCapture(){
   const bx=Math.max(0,Math.floor((Math.min(...xs)-E)*vw)), by=Math.max(0,Math.floor((Math.min(...ys)-E)*vh));
   const bw=Math.min(vw,Math.ceil((Math.max(...xs)+E)*vw))-bx, bh=Math.min(vh,Math.ceil((Math.max(...ys)+E)*vh))-by;
   fullC.width=bw; fullC.height=bh;
-  const sum=K>1?new Uint16Array(bw*bh*3):null; let src=null;
+  // v8: 프레임마다 선명도를 재고, 프레임끼리 어긋나면(손떨림) 평균 대신 가장 선명한 한 장만 사용
+  const sum=K>1?new Uint16Array(bw*bh*3):null; let src=null, best=null, bestS=-1, prevSm=null, shift=0;
   for(let k=0;k<K;k++){
     if(k) await nextFrame();
     fX.drawImage(video,bx,by,bw,bh,0,0,bw,bh);
     src=fX.getImageData(0,0,bw,bh);
-    if(sum){ const d=src.data; for(let i=0,j=0;j<sum.length;i+=4,j+=3){ sum[j]+=d[i]; sum[j+1]+=d[i+1]; sum[j+2]+=d[i+2]; } }
+    const d=src.data, sh=sharpOf(d,bw,bh);
+    if(sh>bestS){ bestS=sh; best=K>1?new Uint8ClampedArray(d):d; }
+    const sm=new Uint8Array(Math.ceil(d.length/64)); for(let i=1,j=0;i<d.length;i+=64,j++) sm[j]=d[i];
+    if(prevSm){ let df=0; for(let j=0;j<sm.length;j++) df+=Math.abs(sm[j]-prevSm[j]); shift=Math.max(shift,df/sm.length); } prevSm=sm;
+    if(sum){ for(let i=0,j=0;j<sum.length;i+=4,j+=3){ sum[j]+=d[i]; sum[j+1]+=d[i+1]; sum[j+2]+=d[i+2]; } }
   }
-  if(sum){ const d=src.data; for(let i=0,j=0;j<sum.length;i+=4,j+=3){ d[i]=sum[j]/K; d[i+1]=sum[j+1]/K; d[i+2]=sum[j+2]/K; } }
+  if(sum){ const d=src.data;
+    if(shift>4){ d.set(best); } // 손떨림: 가장 선명한 프레임
+    else { for(let i=0,j=0;j<sum.length;i+=4,j+=3){ d[i]=sum[j]/K; d[i+1]=sum[j+1]/K; d[i+2]=sum[j+2]/K; } } }
+  // v8: 앞 페이지들보다 확연히 흐리면(흔들림) 버리고 다시 시도(최대 3번)
+  if(!force && mode==='live' && sharpHist.length>=2){
+    const med=[...sharpHist].sort((a,b)=>a-b)[sharpHist.length>>1];
+    if(bestS<med*0.55 && gateFails<3){ gateFails++; $('#hint').textContent='사진이 흔들렸어요. 다시 찍는 중…'; fullC.width=fullC.height=1; return false; }
+  }
+  gateFails=0; sharpHist.push(bestS); if(sharpHist.length>8) sharpHist.shift();
   const q=crop.map(([x,y])=>[x*vw-bx,y*vh-by]);
   const dist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
   let W=Math.max(dist(q[0],q[1]),dist(q[3],q[2])), H=Math.max(dist(q[0],q[3]),dist(q[1],q[2]));
@@ -668,6 +714,7 @@ async function doCapture(){
   pages.push(page); dbPut(page); renderPages();
   const f=$('#flash'); f.classList.add('on'); requestAnimationFrame(()=>requestAnimationFrame(()=>f.classList.remove('on')));
   setStatus('shot', pages.length+'번 저장');
+  return true;
   $('#hint').textContent = how==='auto' ? `${pages.length}번: 문서 테두리를 자동으로 찾아 잘랐어요.` : `${pages.length}번: 테두리를 못 찾아 파란 모서리 위치로 잘랐어요. 모서리를 문서에 맞춰 주세요.`;
 }
 
@@ -688,9 +735,12 @@ async function encodePage(cv){
   tc.getContext('2d').drawImage(cv,0,0,tw,th);
   return {w:W, h:H, buf, thumb:tc.toDataURL('image/jpeg',0.7)};
 }
-const motion={x:0,y:0,ok:false,phys:0}; let upSign=ls.get('scan.upSign',-1), upCal=false, motionOn=false;
+const motion={x:0,y:0,ok:false,phys:0,lastMoveT:-1e9,rot:0};
+const phoneStill=()=>performance.now()-motion.lastMoveT>600; // v8: 폰이 0.6초 이상 가만히 있어야 촬영
+let upSign=ls.get('scan.upSign',-1), upCal=false, motionOn=false;
 function uiAngle(){ let a=(screen.orientation&&typeof screen.orientation.angle==='number')?screen.orientation.angle:(typeof window.orientation==='number'?window.orientation:0); return ((a%360)+360)%360; }
 function onMotion(e){
+  const rr=e.rotationRate; if(rr&&rr.alpha!=null){ const m=Math.hypot(rr.alpha||0,rr.beta||0,rr.gamma||0); if(m>10) motion.lastMoveT=performance.now(); motion.rot=m; }
   const g=e.accelerationIncludingGravity; if(!g||g.x==null) return;
   const x=g.x, y=g.y; if(Math.hypot(x,y)<4) return; // 거의 눕혀 둔 상태면 이전 방향 유지
   if(!upCal && uiAngle()===0 && Math.abs(y)>8 && Math.abs(x)<3 && innerHeight>innerWidth){ upSign=Math.sign(y); upCal=true; ls.set('scan.upSign',upSign); }
@@ -734,8 +784,8 @@ function renderPages(){
   const box=$('#pages'); box.textContent='';
   if(!pages.length){ const p=document.createElement('div'); p.className='nopages'; p.textContent='아직 없습니다. 스캔을 시작하면 1번부터 여기에 쌓입니다.'; box.append(p); }
   pages.forEach((p,i)=>{
-    const el=document.createElement('div'); el.className='pg';
-    const img=document.createElement('img'); img.src=p.thumb; img.alt=(i+1)+'번 페이지'; img.onclick=()=>{ const u=URL.createObjectURL(new Blob([p.buf],{type:'image/jpeg'})); $('#viewImg').src=u; $('#viewer').hidden=false; $('#viewer').onclick=()=>{ $('#viewer').hidden=true; URL.revokeObjectURL(u); }; };
+    const el=document.createElement('div'); el.className='pg'+(selMode&&sel.has(p.id)?' picked':'');
+    const img=document.createElement('img'); img.src=p.thumb; img.alt=(i+1)+'번 페이지'; img.onclick=()=>{ if(selMode){ sel.has(p.id)?sel.delete(p.id):sel.add(p.id); renderPages(); return; } const u=URL.createObjectURL(new Blob([p.buf],{type:'image/jpeg'})); $('#viewImg').src=u; $('#viewer').hidden=false; $('#viewer').onclick=()=>{ $('#viewer').hidden=true; URL.revokeObjectURL(u); }; };
     const n=document.createElement('span'); n.className='n'; n.textContent=i+1;
     const meta=document.createElement('div'); meta.className='meta';
     const s=document.createElement('span'); s.textContent=`${p.w}×${p.h}`;
@@ -747,6 +797,8 @@ function renderPages(){
     meta.append(s,bt); el.append(img,n,meta); box.append(el);
   });
   $('#count').textContent=pages.length+'장';
+  $('#btnSel').disabled=!pages.length; $('#selBar').hidden=!selMode; $('#pages').classList.toggle('selecting',selMode);
+  $('#selDel').disabled=!sel.size; $('#selDel').textContent=`선택한 ${sel.size}장 지우기`; $('#selInfo').textContent=sel.size?`${sel.size}장 선택됨`:'지울 페이지를 누르세요';
   const has=pages.length>0; $('#btnPdf').disabled=!has; $('#btnZip').disabled=!has; $('#btnClear').disabled=!has;
   box.scrollTop=box.scrollHeight;
 }
@@ -843,6 +895,11 @@ $('#btnZip').onclick=async()=>{
   }
   await saveFile(`${S.prefix}_${stamp()}.zip`, buildZip(files));
 };
+let selMode=false; const sel=new Set();
+$('#btnSel').onclick=()=>{ selMode=!selMode; sel.clear(); $('#clearAsk').hidden=true; renderPages(); };
+$('#selDone').onclick=()=>{ selMode=false; sel.clear(); renderPages(); };
+$('#selAll').onclick=()=>{ if(sel.size===pages.length) sel.clear(); else pages.forEach(p=>sel.add(p.id)); renderPages(); };
+$('#selDel').onclick=()=>{ const n=sel.size; pages=pages.filter(p=>{ if(sel.has(p.id)){ dbDel(p.id); return false; } return true; }); sel.clear(); selMode=false; renderPages(); toast(`${n}장을 지웠어요. 번호가 다시 1번부터 매겨졌어요.`); };
 $('#btnClear').onclick=()=>{ $('#clearAsk').hidden=false; };
 $('#clearNo').onclick=()=>{ $('#clearAsk').hidden=true; };
 $('#clearYes').onclick=()=>{ pages=[]; dbClear(); renderPages(); $('#clearAsk').hidden=true; resetDetect(); toast('모두 지웠어요. 다음 장이 1번입니다.'); };
@@ -952,7 +1009,7 @@ $('#btnRun').onclick=async()=>{
     stopRun();
   }
 };
-$('#btnShot').onclick=async()=>{ await capture(); refSig=signature(); prevSig=refSig; phase='watch'; };
+$('#btnShot').onclick=async()=>{ await capture(true); refSig=signature(); prevSig=refSig; phase='watch'; };
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && running) lockWake(); });
 
 /* ---------- phone dock ---------- */
